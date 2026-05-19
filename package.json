@@ -41,7 +41,10 @@
     "@radix-ui/react-progress": "^1.1.0",
     "sonner": "^1.5.0",
     "bullmq": "^5.8.3",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-separator": "^1.1.0",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/node": "^20",
