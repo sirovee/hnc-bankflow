@@ -18,23 +18,29 @@ export default function PdfViewer({ file }: Props) {
     let cancelled = false
     async function load() {
       try {
-        const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist')
-        GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.mjs`
+        const pdfjsLib = await import('pdfjs-dist')
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.mjs`
 
         if (pdfRef.current) {
-          await pdfRef.current.cleanup?.()
-          await pdfRef.current.destroy?.()
+          try { await pdfRef.current.cleanup(); await pdfRef.current.destroy() } catch {}
         }
 
-        const url = URL.createObjectURL(file)
-        const pdf = await getDocument({
-          url,
-          onPassword: (cb: any, reason: number) => {
-            const pwd = prompt(reason === 2 ? 'Wrong password, try again:' : 'PDF is password protected:')
-            if (pwd) cb(pwd)
-            else setError('Cannot open password-protected PDF.')
+        const url      = URL.createObjectURL(file)
+        const loadTask = pdfjsLib.getDocument(url)
+
+        // Handle password via promise rejection
+        const pdf = await loadTask.promise.catch((err: any) => {
+          if (err?.name === 'PasswordException') {
+            const pwd = prompt('🔒 PDF is password protected. Enter password:')
+            if (pwd) {
+              loadTask.onPassword = (cb: any) => cb(pwd)
+              return pdfjsLib.getDocument({ url, password: pwd }).promise
+            } else {
+              throw new Error('Cannot open password-protected PDF without password.')
+            }
           }
-        }).promise
+          throw err
+        })
 
         if (cancelled) return
         pdfRef.current = pdf
@@ -43,6 +49,7 @@ export default function PdfViewer({ file }: Props) {
         setLoading(false)
       } catch (e: any) {
         if (!cancelled) setError(e.message || 'Failed to load PDF')
+        setLoading(false)
       }
     }
     load()
@@ -75,7 +82,6 @@ export default function PdfViewer({ file }: Props) {
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-border bg-background overflow-hidden">
-      {/* Toolbar */}
       <div className="flex items-center gap-1.5 border-b border-border bg-muted/30 px-3 py-2">
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPage(p => Math.max(1, p-1))} disabled={page<=1}>
           <ChevronLeft className="h-4 w-4"/>
@@ -98,13 +104,11 @@ export default function PdfViewer({ file }: Props) {
           <RotateCcw className="h-3.5 w-3.5"/>
         </Button>
       </div>
-      {/* Canvas */}
       <div className="flex-1 overflow-auto p-3">
-        {loading ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading PDF…</div>
-        ) : (
-          <canvas ref={canvasRef} className="block rounded shadow-sm" />
-        )}
+        {loading
+          ? <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading PDF…</div>
+          : <canvas ref={canvasRef} className="block rounded shadow-sm" />
+        }
       </div>
     </div>
   )
