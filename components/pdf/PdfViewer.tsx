@@ -25,31 +25,26 @@ export default function PdfViewer({ file }: Props) {
           try { await pdfRef.current.cleanup(); await pdfRef.current.destroy() } catch {}
         }
 
-        const url      = URL.createObjectURL(file)
-        const loadTask = pdfjsLib.getDocument(url)
+        const url        = URL.createObjectURL(file)
+        const loadingTask = pdfjsLib.getDocument(url)
 
-        // Handle password via promise rejection
-        const pdf = await loadTask.promise.catch((err: any) => {
+        // Handle password separately via promise rejection
+        const pdf = await loadingTask.promise.catch((err: any) => {
           if (err?.name === 'PasswordException') {
-            const pwd = prompt('🔒 PDF is password protected. Enter password:')
-            if (pwd) {
-              loadTask.onPassword = (cb: any) => cb(pwd)
-              return pdfjsLib.getDocument({ url, password: pwd }).promise
-            } else {
-              throw new Error('Cannot open password-protected PDF without password.')
-            }
+            setError('🔒 Password-protected PDF. Please remove password before uploading.')
+          } else {
+            setError(err?.message || 'Failed to load PDF')
           }
-          throw err
+          return null
         })
 
-        if (cancelled) return
+        if (cancelled || !pdf) return
         pdfRef.current = pdf
         setTotal(pdf.numPages)
         setPage(1)
         setLoading(false)
       } catch (e: any) {
         if (!cancelled) setError(e.message || 'Failed to load PDF')
-        setLoading(false)
       }
     }
     load()
