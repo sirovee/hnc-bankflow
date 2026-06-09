@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@layer base {
+  :root{--background:0 0% 100%;--foreground:222.2 84% 4.9%;--card:0 0% 100%;--card-foreground:222.2 84% 4.9%;--primary:243 75% 59%;--primary-foreground:210 40% 98%;--secondary:210 40% 96.1%;--secondary-foreground:222.2 47.4% 11.2%;--muted:210 40% 96.1%;--muted-foreground:215.4 16.3% 46.9%;--accent:210 40% 96.1%;--accent-foreground:222.2 47.4% 11.2%;--destructive:0 84.2% 60.2%;--destructive-foreground:210 40% 98%;--border:214.3 31.8% 91.4%;--input:214.3 31.8% 91.4%;--ring:243 75% 59%;--radius:0.6rem}
+  *{@apply border-border}body{@apply bg-background text-foreground}
+}
+.sticky-table thead th{position:sticky;top:0;z-index:20;background:hsl(var(--background));box-shadow:0 1px 0 hsl(var(--border))}
+.table-scroll{overflow-y:auto;max-height:calc(100vh - 320px)}
+.cell-input{background:transparent;border:1px solid transparent;border-radius:4px;padding:2px 6px;font-size:12px;width:100%;transition:all 0.15s;font-family:inherit}
+.cell-input:hover{border-color:hsl(var(--border));background:hsl(var(--muted))}
+.cell-input:focus{border-color:hsl(var(--ring));background:hsl(var(--background));outline:none}
+.row-error td{background:#fff5f5!important}.row-error td:first-child{border-left:3px solid #ef4444}
+.row-warn td{background:#fffbeb!important}.row-warn td:first-child{border-left:3px solid #f59e0b}
+.row-dup td{background:#fdf4ff!important}.row-dup td:first-child{border-left:3px solid #a855f7}
+.row-flag td{background:#fff1f2!important}.row-flag td:first-child{border-left:3px solid #f43f5e}
