@@ -5,7 +5,6 @@ import { GoogleAuth } from 'google-auth-library'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-
 function parseTransactions(document: any, mappings: any[]): any[] {
   const rawText = document?.text || ''
   const transactions: any[] = []
@@ -19,11 +18,6 @@ function parseTransactions(document: any, mappings: any[]): any[] {
       if (text.toUpperCase().includes(k)) return text.replace(new RegExp(k, 'gi'), v)
     }
     return text
-  }
-  function amt(s: string): string {
-    if (!s) return ''
-    const n = parseFloat(s.replace(/[£$€,\s]/g, ''))
-    return isNaN(n) ? '' : n.toFixed(2)
   }
   if (!rawText) return []
   const lines  = rawText.split('\n').map((l: string) => l.trim()).filter(Boolean)
@@ -43,7 +37,8 @@ function parseTransactions(document: any, mappings: any[]): any[] {
     const tm      = full.match(typeRx)
     const txtype  = tm ? tm[1].toUpperCase() : ''
     const amounts = [...full.matchAll(amtRx)].map((m: any) => m[1].replace(/,/g, ''))
-    let desc = full.replace(dateRx,'').replace(typeRx,'').replace(/£?\d{1,3}(?:,\d{3})*\.\d{2}/g,'').replace(/\s+/g,' ').trim()
+    let desc = full.replace(dateRx,'').replace(typeRx,'')
+      .replace(/£?\d{1,3}(?:,\d{3})*\.\d{2}/g,'').replace(/\s+/g,' ').trim()
     desc = fix(desc)
     let paidin = '', paidout = '', balance = ''
     if (amounts.length >= 2) {
@@ -67,75 +62,65 @@ function parseTransactions(document: any, mappings: any[]): any[] {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Auth
     const sb = createAdminClient()
     const { data: { user } } = await sb.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-    // 2. Parse file
     const form = await req.formData()
     const file = form.get('file') as File | null
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    if (file.size > 20 * 1024 * 1024) return NextResponse.json({ error: 'File too large. Max 20MB.' }, { status: 400 })
 
-    // 3. Get mappings (safe null check)
     const { data: mappings } = await sb.from('correction_mappings')
       .select('original_text,corrected_text,category')
       .or(`user_id.eq.${user.id},is_global.eq.true`)
-    const safeMappings = mappings || []
 
-    // 4. Parse & validate Google credentials
     const rawJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || ''
-    if (!rawJson) return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON not set in Vercel environment variables' }, { status: 500 })
+    if (!rawJson) return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON not set in Vercel env vars' }, { status: 500 })
 
     let creds: any
-    try {
-      creds = JSON.parse(rawJson)
-    } catch (e) {
-      return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON is invalid JSON. Go to Vercel → Settings → Env Vars → paste minified JSON again.' }, { status: 500 })
-    }
+    try { creds = JSON.parse(rawJson) }
+    catch { return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON is invalid JSON — re-paste minified JSON in Vercel env vars' }, { status: 500 }) }
 
-    const location    = (process.env.GOOGLE_LOCATION    || 'eu').toLowerCase().trim()
-    const projectId   = (process.env.GOOGLE_PROJECT_ID  || '').trim()
-    const processorId = (process.env.GOOGLE_PROCESSOR_ID|| '').trim()
-
+    const location    = (process.env.GOOGLE_LOCATION     || 'eu').toLowerCase().trim()
+    const projectId   = (process.env.GOOGLE_PROJECT_ID   || '').trim()
+    const processorId = (process.env.GOOGLE_PROCESSOR_ID || '').trim()
     if (!projectId)   return NextResponse.json({ error: 'GOOGLE_PROJECT_ID not set' }, { status: 500 })
     if (!processorId) return NextResponse.json({ error: 'GOOGLE_PROCESSOR_ID not set' }, { status: 500 })
 
-    // 5. Get OAuth token
     const auth   = new GoogleAuth({ credentials: creds, scopes: ['https://www.googleapis.com/auth/cloud-platform'] })
     const client = await auth.getClient()
     const token  = await client.getAccessToken()
-    if (!token.token) return NextResponse.json({ error: 'Failed to get Google access token. Check service account permissions.' }, { status: 500 })
+    if (!token.token) return NextResponse.json({ error: 'Failed to get Google access token' }, { status: 500 })
 
-    // 6. Call Document AI
-    const buffer  = Buffer.from(await file.arrayBuffer())
-    const url     = `https://${location}-documentai.googleapis.com/v1/projects/${projectId}/locations/${location}/processors/${processorId}:process`
-    const gRes    = await fetch(url, {
-      method: 'POST',
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const url    = `https://${location}-documentai.googleapis.com/v1/projects/${projectId}/locations/${location}/processors/${processorId}:process`
+
+    const gRes = await fetch(url, {
+      method:  'POST',
       headers: { 'Authorization': `Bearer ${token.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rawDocument: { content: buffer.toString('base64'), mimeType: file.type || 'application/pdf' } })
+      body:    JSON.stringify({ rawDocument: { content: buffer.toString('base64'), mimeType: file.type || 'application/pdf' } })
     })
 
     if (!gRes.ok) {
-      const errBody = await gRes.json().catch(() => ({}))
-      const msg = (errBody as any)?.error?.message || `Google API HTTP ${gRes.status}`
-      return NextResponse.json({ error: msg }, { status: 500 })
+      const errBody = await gRes.json().catch(() => ({})) as any
+      return NextResponse.json({ error: errBody?.error?.message || `Google API error ${gRes.status}` }, { status: 500 })
     }
 
     const result = await gRes.json()
-    const transactions = parseTransactions(result.document, safeMappings)
+    const transactions = parseTransactions(result.document, mappings || [])
 
-    // 7. Rate limit record (non-blocking)
-    const now = new Date()
-    sb.from('rate_limits').insert({
-      user_id: user.id, action: 'process_pdf',
-      window_key: `${user.id}:pdf:${Math.floor(now.getTime() / 3600000)}`
-    }).then(() => {}).catch(() => {})
+    // Fire-and-forget rate limit record (void to avoid TS promise error)
+    void sb.from('rate_limits').insert({
+      user_id:    user.id,
+      action:     'process_pdf',
+      window_key: `${user.id}:pdf:${Math.floor(Date.now() / 3600000)}`
+    })
 
     return NextResponse.json({
       transactions,
       sessionId: crypto.randomUUID(),
-      fileName: file.name,
+      fileName:  file.name,
       stats: { total: transactions.length, autoCorrected: 0, suggested: 0, lowConfidence: 0, errors: 0, warnings: 0, duplicates: 0, redFlags: 0 }
     })
 
