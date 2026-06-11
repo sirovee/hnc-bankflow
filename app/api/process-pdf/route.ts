@@ -5,9 +5,6 @@ import { GoogleAuth } from 'google-auth-library'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-export const config = {
-  api: { bodyParser: false }
-}
 
 function parseTransactions(document: any, mappings: any[]): any[] {
   const rawText = document?.text || ''
