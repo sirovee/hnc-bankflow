@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { GoogleAuth } from 'google-auth-library'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-// Helper to escape regex special characters like * or +
-function escapeRegExp(string: string) {
+// Safely escape special regex characters (like *, +, ?) inside text entries
+function escapeRegExp(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
@@ -26,7 +26,6 @@ function parseTransactions(document: any, mappings: any[]): any[] {
     let updatedText = text;
     for (const [k, v] of Object.entries(corrMap)) {
       if (updatedText.toUpperCase().includes(k)) {
-        // FIXED: Safe RegExp execution with escaped characters
         const safePattern = escapeRegExp(k);
         updatedText = updatedText.replace(new RegExp(safePattern, 'gi'), v);
       }
@@ -72,9 +71,18 @@ function parseTransactions(document: any, mappings: any[]): any[] {
     
     if (date) {
       transactions.push({
-        id: crypto.randomUUID().slice(0, 8), // FIXED: Swapped unstable Math.random with clean browser native random keys
-        date, txtype, description: desc || '—', paidin, paidout, balance,
-        _confidence: null, _page: null, _auto_corrected: false, _suggested: false, _suggestion: null,
+        id: crypto.randomUUID().slice(0, 8),
+        date, 
+        txtype, 
+        description: desc || '—', 
+        paidin, 
+        paidout, 
+        balance,
+        _confidence: null, 
+        _page: null, 
+        _auto_corrected: false, 
+        _suggested: false, 
+        _suggestion: null,
         _ocr: { date, txtype, description: desc || '—', paidin, paidout, balance },
         _match: { matched: false, corrected_text: '', category: null, match_type: 'none', similarity: 0, trust_score: 0, overrode_ai: false, entry_id: null }
       })
@@ -86,39 +94,59 @@ function parseTransactions(document: any, mappings: any[]): any[] {
 
 export async function POST(req: NextRequest) {
   try {
-    const sb = createAdminClient()
-    const { data: { user } } = await sb.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+    // 1. Direct Supabase configuration initialization (No Next.js middleware cookie interference)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json({ error: 'Supabase configuration environment variables are missing.' }, { status: 500 })
+    }
+    
+    const sb = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false }
+    })
 
+    // 2. Authenticate using incoming request token validation
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) return NextResponse.json({ error: 'Unauthorised — Missing Authorization token headers' }, { status: 401 })
+    
+    const tokenStr = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await sb.auth.getUser(tokenStr)
+    if (authError || !user) return NextResponse.json({ error: 'Unauthorised access profile' }, { status: 401 })
+
+    // 3. Form handling constraints
     const form = await req.formData()
     const file = form.get('file') as File | null
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     if (file.size > 20 * 1024 * 1024) return NextResponse.json({ error: 'File too large. Max 20MB.' }, { status: 400 })
 
+    // 4. Fetch structural map dependencies
     const { data: mappings } = await sb.from('correction_mappings')
       .select('original_text,corrected_text,category')
       .or(`user_id.eq.${user.id},is_global.eq.true`)
 
+    // 5. Cloud Platform Credentials setup
     const rawJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || ''
     if (!rawJson) return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON not set in Vercel env vars' }, { status: 500 })
 
     let creds: any
     try { creds = JSON.parse(rawJson) }
-    catch { return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON is invalid JSON' }, { status: 500 }) }
+    catch { return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON runtime parsing failed' }, { status: 500 }) }
 
     const location    = (process.env.GOOGLE_LOCATION     || 'eu').toLowerCase().trim()
     const projectId   = (process.env.GOOGLE_PROJECT_ID   || '').trim()
     const processorId = (process.env.GOOGLE_PROCESSOR_ID || '').trim()
     
     if (!projectId || !processorId) {
-      return NextResponse.json({ error: 'Google Project configuration environment variables missing' }, { status: 500 })
+      return NextResponse.json({ error: 'Google configuration platform parameters are missing' }, { status: 500 })
     }
 
     const auth   = new GoogleAuth({ credentials: creds, scopes: ['https://www.googleapis.com/auth/cloud-platform'] })
     const client = await auth.getClient()
     const token  = await client.getAccessToken()
-    if (!token.token) return NextResponse.json({ error: 'Failed to get Google access token' }, { status: 500 })
+    if (!token.token) return NextResponse.json({ error: 'Failed to retrieve cloud access scopes' }, { status: 500 })
 
+    // 6. Execution request pipeline payload construction
     const buffer = Buffer.from(await file.arrayBuffer())
     const url    = `https://${location}-documentai.googleapis.com/v1/projects/${projectId}/locations/${location}/processors/${processorId}:process`
 
@@ -136,7 +164,7 @@ export async function POST(req: NextRequest) {
     const result = await gRes.json()
     const transactions = parseTransactions(result.document, mappings || [])
 
-    // Track operation in limits table safely
+    // Log operational usage safely
     void sb.from('rate_limits').insert({
       user_id:    user.id,
       action:     'process_pdf',
@@ -151,7 +179,7 @@ export async function POST(req: NextRequest) {
     })
 
   } catch (err: any) {
-    console.error('[process-pdf]', err)
-    return NextResponse.json({ error: err?.message || 'Unexpected server error' }, { status: 500 })
+    console.error('[process-pdf-error-log]', err)
+    return NextResponse.json({ error: err?.message || 'Internal pipeline processing fault occurred' }, { status: 500 })
   }
 }
