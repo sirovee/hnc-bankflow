@@ -129,6 +129,6 @@ export async function POST(req: NextRequest) {
 
   } catch (err: any) {
     console.error('[process-pdf]', err)
-    return NextResponse.json({ error: err?.message || 'Unexpected server error' }, { status: 500 })
+    return NextResponse.json({ error: 'V3-' + (err?.message || 'Unexpected server error') }, { status: 500 })
   }
 }
