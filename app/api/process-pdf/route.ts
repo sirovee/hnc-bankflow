@@ -20,6 +20,45 @@ function parseTransactions(document: any, mappings: any[]): any[] {
     }
     return text
   }
+  function cleanAmt(s: string): string {
+    if (!s) return ''
+    const n = parseFloat(String(s).replace(/[£$€,\s]/g, ''))
+    return isNaN(n) ? '' : n.toFixed(2)
+  }
+  function entVal(e: any): string {
+    return e?.normalizedValue?.text || e?.mentionText || ''
+  }
+
+  // LAYER 1: Document AI Bank Statement Parser entities
+  const entities = document?.entities || []
+  for (const ent of entities) {
+    const type = (ent.type || '').toLowerCase()
+    if (type.includes('table_item') || type.includes('transaction') || type.includes('line_item')) {
+      const tx: any = { date:'', txtype:'', description:'', paidin:'', paidout:'', balance:'' }
+      for (const p of (ent.properties || [])) {
+        const pt = (p.type || '').toLowerCase()
+        const pv = entVal(p)
+        if (pt.includes('date'))                                       tx.date        = pv
+        else if (pt.includes('description') || pt.includes('narrative') || pt.includes('detail')) tx.description = fix(pv)
+        else if (pt.includes('credit') || pt.includes('deposit') || pt.includes('paid_in')) tx.paidin = cleanAmt(pv)
+        else if (pt.includes('debit')  || pt.includes('withdrawal') || pt.includes('paid_out')) tx.paidout = cleanAmt(pv)
+        else if (pt.includes('balance'))                                tx.balance     = cleanAmt(pv)
+        else if (pt.includes('type') || pt.includes('code'))            tx.txtype      = pv
+      }
+      if (tx.date || tx.description) {
+        transactions.push({
+          id: Math.random().toString(36).slice(2),
+          ...tx, description: tx.description || '—',
+          _confidence: ent.confidence ?? null, _page: null, _auto_corrected:false, _suggested:false, _suggestion:null,
+          _ocr: { ...tx, description: tx.description || '—' },
+          _match: { matched:false, corrected_text:'', category:null, match_type:'none', similarity:0, trust_score:0, overrode_ai:false, entry_id:null }
+        })
+      }
+    }
+  }
+  if (transactions.length > 0) return transactions
+
+  // LAYER 2: Regex fallback on raw text
   if (!rawText) return []
   const lines  = rawText.split('\n').map((l: string) => l.trim()).filter(Boolean)
   const dateRx = /^(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})/i
