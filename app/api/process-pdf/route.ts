@@ -4,6 +4,7 @@ import { GoogleAuth } from 'google-auth-library'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
+export const preferredRegion = ['lhr1']
 
 function parseTransactions(document: any, mappings: any[]): any[] {
   const rawText = document?.text || ''
@@ -85,6 +86,11 @@ export async function POST(req: NextRequest) {
     let creds: any
     try { creds = JSON.parse(rawJson) }
     catch { return NextResponse.json({ error: 'GOOGLE_SERVICE_ACCOUNT_JSON is invalid JSON — re-paste minified JSON in Vercel' }, { status: 500 }) }
+
+    // Repair private_key newlines (Vercel env vars escape them)
+    if (creds.private_key) {
+      creds.private_key = creds.private_key.replace(/\\n/g, String.fromCharCode(10)).replace(/\n/g, String.fromCharCode(10))
+    }
 
     const location    = (process.env.GOOGLE_LOCATION     || 'eu').toLowerCase().trim()
     const projectId   = (process.env.GOOGLE_PROJECT_ID   || '').trim()
