@@ -151,7 +151,7 @@ export default function ConverterPage(){
                       <tr key={t.id} className={`border-b border-border hover:bg-slate-50 transition-colors group ${rc}`}>
                         <td className="px-3 py-2"><input type="checkbox" checked={t._selected} onChange={e=>tx.toggleSelect(t.id,e.target.checked)}/></td>
                         <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
-                          <input className="cell-input w-24" defaultValue={t.date} onBlur={e=>{if(e.target.value!==t.date)tx.editCell(ri,'date',e.target.value)}}/>
+                          <input className="cell-input w-24" defaultValue={t.date} onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.date)tx.editCell(ri,'date',e.target.value)}}/>
                         </td>
                         <td className="px-3 py-2">
                           <select className="rounded border-transparent bg-transparent text-xs font-semibold text-indigo-600 cursor-pointer" value={t.txtype} onChange={e=>tx.editCell(ri,'txtype',e.target.value)}>
@@ -159,7 +159,7 @@ export default function ConverterPage(){
                           </select>
                         </td>
                         <td className="px-3 py-2 max-w-[220px]">
-                          <input className="cell-input w-full" defaultValue={t.description} onBlur={e=>{if(e.target.value!==t.description)tx.editCell(ri,'description',e.target.value)}}/>
+                          <input className="cell-input w-full" defaultValue={t.description} onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.description)tx.editCell(ri,'description',e.target.value)}}/>
                           <div className="flex gap-1 mt-0.5 flex-wrap">
                             {t._auto_corrected&&<span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-violet-100 text-violet-700">🧠 Learned</span>}
                             {t._isRedFlag&&<span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700">🚩 Flag</span>}
@@ -169,18 +169,18 @@ export default function ConverterPage(){
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">
-                            <input className="cell-input w-20 text-right font-mono" style={{color:'#16a34a'}} defaultValue={t.paidin} placeholder="—" onBlur={e=>{if(e.target.value!==t.paidin)tx.editCell(ri,'paidin',e.target.value)}}/>
+                            <input className="cell-input w-20 text-right font-mono" style={{color:'#16a34a'}} defaultValue={t.paidin} placeholder="—" onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.paidin)tx.editCell(ri,'paidin',e.target.value)}}/>
                             {t.paidout&&!t.paidin&&<button onClick={()=>tx.moveAmount(ri,'toIn')} className="text-[10px] rounded px-1 border" style={{background:'#f0fdf4',color:'#16a34a',borderColor:'#bbf7d0'}}>←In</button>}
                           </div>
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">
-                            <input className="cell-input w-20 text-right font-mono" style={{color:'#dc2626'}} defaultValue={t.paidout} placeholder="—" onBlur={e=>{if(e.target.value!==t.paidout)tx.editCell(ri,'paidout',e.target.value)}}/>
+                            <input className="cell-input w-20 text-right font-mono" style={{color:'#dc2626'}} defaultValue={t.paidout} placeholder="—" onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.paidout)tx.editCell(ri,'paidout',e.target.value)}}/>
                             {t.paidin&&!t.paidout&&<button onClick={()=>tx.moveAmount(ri,'toOut')} className="text-[10px] rounded px-1 border" style={{background:'#fef2f2',color:'#dc2626',borderColor:'#fecaca'}}>Out→</button>}
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <input className={`cell-input w-20 text-right font-mono ${t._val?.balImpossible?'border-red-400 bg-red-50':''}`} style={{color:'#d97706'}} defaultValue={t.balance} placeholder="—" onBlur={e=>{if(e.target.value!==t.balance)tx.editCell(ri,'balance',e.target.value)}}/>
+                          <input className={`cell-input w-20 text-right font-mono ${t._val?.balImpossible?'border-red-400 bg-red-50':''}`} style={{color:'#d97706'}} defaultValue={t.balance} placeholder="—" onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.balance)tx.editCell(ri,'balance',e.target.value)}}/>
                           {t._val?.balImpossible&&<p className="text-[9px] font-bold" style={{color:'#dc2626'}}>Exp:£{t._val.expected?.toFixed(2)}</p>}
                         </td>
                         <td className="px-3 py-2">
