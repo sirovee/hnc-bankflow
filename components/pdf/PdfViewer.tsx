@@ -14,7 +14,7 @@ export default function PdfViewer({file}:Props){
     async function load(){
       try{
         const lib=await import('pdfjs-dist')
-        lib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.mjs'
+        lib.GlobalWorkerOptions.workerSrc=`https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${lib.version}/pdf.worker.min.mjs`
         if(pdfRef.current){try{await pdfRef.current.destroy()}catch{}}
         const url=URL.createObjectURL(file)
         const pdf=await lib.getDocument(url).promise
