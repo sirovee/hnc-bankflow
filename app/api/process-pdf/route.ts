@@ -80,18 +80,17 @@ function parseTransactions(document: any, mappings: any[]): any[] {
 
     // NatWest format: [Paid in OR Paid out] then [Balance]
     // The LAST amount is always balance. The one before is the transaction amount.
+    // Exactly ONE of paidin/paidout is set — never both.
     let paidin = '', paidout = '', balance = ''
     if (amounts.length >= 2) {
       balance = amounts[amounts.length - 1]
       const amt = amounts[amounts.length - 2]
-      // Determine in/out by type and description
-      const isCredit = /^(BAC|POC)$/.test(txtype) ||
-                       /from a\/c|lopay|nanosoft tech|payer/i.test(desc)
-      const isDebit  = /^(POS|CHG|S\/O|D\/D|SBT|DPC)$/.test(txtype) &&
-                       !/from a\/c/i.test(desc)
-      if (isCredit && !/to a\/c/i.test(desc)) paidin = amt
-      else if (isDebit || /to a\/c|bbls|loan|edf|castle water|facebk|tesco|kushiara|countrystyle|gocardless|nest|jaygate|sefe|af accountants|unpaid item|squaremile/i.test(desc)) paidout = amt
-      else paidin = amt
+      const isCredit = /^(BAC|POC)$/.test(txtype) || /from a\/c|lopay|nanosoft tech|payer|receipt|refund|deposit/i.test(desc)
+      if (isCredit && !/to a\/c/i.test(desc)) {
+        paidin = amt; paidout = ''
+      } else {
+        paidout = amt; paidin = ''
+      }
     } else if (amounts.length === 1) {
       balance = amounts[0]
     }
