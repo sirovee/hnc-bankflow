@@ -6,6 +6,8 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 export const preferredRegion = ['lhr1']
 
+const TYPE_CODES = ['POS','DPC','POC','CHG','BAC','S/O','D/D','SBT','FPO','BGC','TRF','ATM','TFR','CR','DR']
+
 function parseTransactions(document: any, mappings: any[]): any[] {
   const rawText = document?.text || ''
   const transactions: any[] = []
@@ -16,7 +18,7 @@ function parseTransactions(document: any, mappings: any[]): any[] {
   function fix(text: string): string {
     if (!text) return text
     for (const [k, v] of Object.entries(corrMap)) {
-      if (text.toUpperCase().includes(k)) return text.replace(new RegExp(k, 'gi'), v)
+      if (text.toUpperCase().includes(k)) return text.replace(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), v)
     }
     return text
   }
@@ -25,78 +27,86 @@ function parseTransactions(document: any, mappings: any[]): any[] {
     const n = parseFloat(String(s).replace(/[£$€,\s]/g, ''))
     return isNaN(n) ? '' : n.toFixed(2)
   }
-  function entVal(e: any): string {
-    return e?.normalizedValue?.text || e?.mentionText || ''
+  function toISO(d: string): string {
+    const m = d.match(/^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})$/i)
+    if (!m) return d
+    const months: Record<string,string> = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'}
+    return `${m[3]}-${months[m[2].toLowerCase()]}-${m[1].padStart(2,'0')}`
   }
 
-  // LAYER 1: Document AI Bank Statement Parser entities
-  const entities = document?.entities || []
-  for (const ent of entities) {
-    const type = (ent.type || '').toLowerCase()
-    if (type.includes('table_item') || type.includes('transaction') || type.includes('line_item')) {
-      const tx: any = { date:'', txtype:'', description:'', paidin:'', paidout:'', balance:'' }
-      for (const p of (ent.properties || [])) {
-        const pt = (p.type || '').toLowerCase()
-        const pv = entVal(p)
-        if (pt.includes('date'))                                       tx.date        = pv
-        else if (pt.includes('description') || pt.includes('narrative') || pt.includes('detail')) tx.description = fix(pv)
-        else if (pt.includes('credit') || pt.includes('deposit') || pt.includes('paid_in')) tx.paidin = cleanAmt(pv)
-        else if (pt.includes('debit')  || pt.includes('withdrawal') || pt.includes('paid_out')) tx.paidout = cleanAmt(pv)
-        else if (pt.includes('balance'))                                tx.balance     = cleanAmt(pv)
-        else if (pt.includes('type') || pt.includes('code'))            tx.txtype      = pv
-      }
-      if (tx.date || tx.description) {
-        transactions.push({
-          id: Math.random().toString(36).slice(2),
-          ...tx, description: tx.description || '—',
-          _confidence: ent.confidence ?? null, _page: null, _auto_corrected:false, _suggested:false, _suggestion:null,
-          _ocr: { ...tx, description: tx.description || '—' },
-          _match: { matched:false, corrected_text:'', category:null, match_type:'none', similarity:0, trust_score:0, overrode_ai:false, entry_id:null }
-        })
-      }
-    }
-  }
-  if (transactions.length > 0) return transactions
-
-  // LAYER 2: Regex fallback on raw text
   if (!rawText) return []
-  const lines  = rawText.split('\n').map((l: string) => l.trim()).filter(Boolean)
+
+  const lines = rawText.split('\n').map((l: string) => l.replace(/\s+/g, ' ').trim()).filter(Boolean)
   const dateRx = /^(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})/i
-  const typeRx = /\b(POS|DPC|POC|CHG|BAC|S\/O|D\/D|SBT|FPO|BGC|TRF|ATM|CR|DR)\b/i
-  const amtRx  = /£?(\d{1,3}(?:,\d{3})*\.\d{2})/g
-  let i = 0
-  while (i < lines.length) {
-    const dm = lines[i].match(dateRx)
-    if (!dm) { i++; continue }
-    let full = lines[i], j = i + 1
-    while (j < lines.length && !lines[j].match(dateRx)) {
-      full += ' ' + lines[j]; j++
-      if ([...full.matchAll(amtRx)].length >= 2) break
+
+  // Group lines into transaction blocks (each starts with a date)
+  const blocks: string[] = []
+  let current = ''
+  for (const line of lines) {
+    if (dateRx.test(line)) {
+      if (current) blocks.push(current)
+      current = line
+    } else if (current) {
+      // Skip header/footer noise
+      if (/^(Date Type|Page \d|©|National Westminster|Authorised|Your transactions|Showing:|Account |Sort code|Transactions$)/i.test(line)) continue
+      current += ' ' + line
     }
-    const date    = dm[1]
-    const tm      = full.match(typeRx)
-    const txtype  = tm ? tm[1].toUpperCase() : ''
-    const amounts = [...full.matchAll(amtRx)].map((m: any) => m[1].replace(/,/g, ''))
-    let desc = full.replace(dateRx,'').replace(typeRx,'')
-      .replace(/£?\d{1,3}(?:,\d{3})*\.\d{2}/g,'').replace(/\s+/g,' ').trim()
-    desc = fix(desc)
+  }
+  if (current) blocks.push(current)
+
+  for (const block of blocks) {
+    const dm = block.match(dateRx)
+    if (!dm) continue
+    const date = toISO(dm[1])
+    let rest = block.slice(dm[1].length).trim()
+
+    // Extract type code (right after date)
+    let txtype = ''
+    for (const code of TYPE_CODES) {
+      const re = new RegExp('^' + code.replace('/', '\\/') + '\\b')
+      if (re.test(rest)) { txtype = code; rest = rest.slice(code.length).trim(); break }
+    }
+
+    // Extract all amounts in order
+    const amtMatches = Array.from(rest.matchAll(/£?(\d{1,3}(?:,\d{3})*\.\d{2})/g))
+    const amounts = amtMatches.map(m => m[1].replace(/,/g, ''))
+
+    // Description = everything before the first amount
+    let desc = rest
+    if (amtMatches.length > 0) {
+      desc = rest.slice(0, amtMatches[0].index).trim()
+    }
+    desc = fix(desc.replace(/\s+,/g, ',').replace(/,\s*$/, '').trim())
+
+    // NatWest format: [Paid in OR Paid out] then [Balance]
+    // The LAST amount is always balance. The one before is the transaction amount.
     let paidin = '', paidout = '', balance = ''
     if (amounts.length >= 2) {
       balance = amounts[amounts.length - 1]
-      const a = amounts[amounts.length - 2]
-      if (/from|receipt|deposit|refund/i.test(desc) || ['POC','BAC'].includes(txtype)) paidin = a
-      else if (['CHG','D/D','S/O','SBT','POS'].includes(txtype) || /to a\/c/i.test(desc)) paidout = a
-      else paidin = a
-    } else if (amounts.length === 1) balance = amounts[0]
-    if (date) transactions.push({
-      id: Math.random().toString(36).slice(2),
-      date, txtype, description: desc||'—', paidin, paidout, balance,
-      _confidence: null, _page: null, _auto_corrected: false, _suggested: false, _suggestion: null,
-      _ocr: { date, txtype, description: desc||'—', paidin, paidout, balance },
-      _match: { matched:false, corrected_text:'', category:null, match_type:'none', similarity:0, trust_score:0, overrode_ai:false, entry_id:null }
-    })
-    i = j
+      const amt = amounts[amounts.length - 2]
+      // Determine in/out by type and description
+      const isCredit = /^(BAC|POC)$/.test(txtype) ||
+                       /from a\/c|lopay|nanosoft tech|payer/i.test(desc)
+      const isDebit  = /^(POS|CHG|S\/O|D\/D|SBT|DPC)$/.test(txtype) &&
+                       !/from a\/c/i.test(desc)
+      if (isCredit && !/to a\/c/i.test(desc)) paidin = amt
+      else if (isDebit || /to a\/c|bbls|loan|edf|castle water|facebk|tesco|kushiara|countrystyle|gocardless|nest|jaygate|sefe|af accountants|unpaid item|squaremile/i.test(desc)) paidout = amt
+      else paidin = amt
+    } else if (amounts.length === 1) {
+      balance = amounts[0]
+    }
+
+    if (date) {
+      transactions.push({
+        id: Math.random().toString(36).slice(2),
+        date, txtype, description: desc || '—', paidin, paidout, balance,
+        _confidence: null, _page: null, _auto_corrected: false, _suggested: false, _suggestion: null,
+        _ocr: { date, txtype, description: desc || '—', paidin, paidout, balance },
+        _match: { matched:false, corrected_text:'', category:null, match_type:'none', similarity:0, trust_score:0, overrode_ai:false, entry_id:null }
+      })
+    }
   }
+
   return transactions
 }
 
