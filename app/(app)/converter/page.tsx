@@ -168,17 +168,17 @@ export default function ConverterPage(){
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">
                             <input key={`in-${t.id}-${t.paidin}`} className="cell-input w-20 text-right font-mono" style={{color:'#16a34a'}} defaultValue={t.paidin} placeholder="—" onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.paidin)tx.editCell(ri,'paidin',e.target.value)}}/>
-                            {t.paidout&&!t.paidin&&<button onClick={()=>tx.moveAmount(ri,'toIn')} className="text-[10px] rounded px-1 border" style={{background:'#f0fdf4',color:'#16a34a',borderColor:'#bbf7d0'}}>←In</button>}
+                            {(t.paidin||t.paidout)&&<button title="Toggle direction" onClick={()=>tx.moveAmount(ri,t.paidin?'toOut':'toIn')} className="text-[10px] rounded px-1.5 py-0.5 border font-semibold transition-colors" style={t.paidin?{background:'#dcfce7',color:'#15803d',borderColor:'#86efac'}:{background:'#f1f5f9',color:'#94a3b8',borderColor:'#e2e8f0'}}>In</button>}
                           </div>
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">
                             <input key={`out-${t.id}-${t.paidout}`} className="cell-input w-20 text-right font-mono" style={{color:'#dc2626'}} defaultValue={t.paidout} placeholder="—" onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.paidout)tx.editCell(ri,'paidout',e.target.value)}}/>
-                            {t.paidin&&!t.paidout&&<button onClick={()=>tx.moveAmount(ri,'toOut')} className="text-[10px] rounded px-1 border" style={{background:'#fef2f2',color:'#dc2626',borderColor:'#fecaca'}}>Out→</button>}
+                            {(t.paidin||t.paidout)&&<button title="Toggle direction" onClick={()=>tx.moveAmount(ri,t.paidout?'toIn':'toOut')} className="text-[10px] rounded px-1.5 py-0.5 border font-semibold transition-colors" style={t.paidout?{background:'#fee2e2',color:'#b91c1c',borderColor:'#fca5a5'}:{background:'#f1f5f9',color:'#94a3b8',borderColor:'#e2e8f0'}}>Out</button>}
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <input key={`bal-${t.id}-${t.balance}`} className={`cell-input w-20 text-right font-mono ${t._val?.balImpossible?'border-red-400 bg-red-50':''}`} style={{color:'#d97706'}} defaultValue={t.balance} placeholder="—" onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.balance)tx.editCell(ri,'balance',e.target.value)}}/>
+                          <input key={`bal-${t.id}-${t.balance}`} className={`cell-input w-20 text-right font-mono ${t._val?.balImpossible?'!border-2 !border-red-500 !bg-red-100 animate-pulse':''}`} style={t._val?.balImpossible?{color:'#dc2626',fontWeight:700}:{color:'#d97706'}} defaultValue={t.balance} placeholder="—" onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.balance)tx.editCell(ri,'balance',e.target.value)}}/>
                           {t._val?.balImpossible&&<p className="text-[9px] font-bold" style={{color:'#dc2626'}}>Exp:£{t._val.expected?.toFixed(2)}</p>}
                         </td>
                         <td className="px-3 py-2">
