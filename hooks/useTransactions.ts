@@ -34,7 +34,9 @@ function findDups(txs: EnrichedTransaction[]): Set<number> {
 function reconcile(txs: EnrichedTransaction[]): ReconciliationSummary|null {
   if(!txs.length)return null
   const oldest=txs[txs.length-1],newest=txs[0]
-  const opening=safeFloat(oldest.balance).val
+  // True opening = oldest row's balance reversed by its own movement
+  // (its balance is AFTER the txn, so undo it to get the statement opening)
+  const opening=Math.round((safeFloat(oldest.balance).val - safeFloat(oldest.paidin).val + safeFloat(oldest.paidout).val)*100)/100
   const totalIn=txs.reduce((s,t)=>s+safeFloat(t.paidin).val,0)
   const totalOut=txs.reduce((s,t)=>s+safeFloat(t.paidout).val,0)
   const calc=Math.round((opening+totalIn-totalOut)*100)/100
