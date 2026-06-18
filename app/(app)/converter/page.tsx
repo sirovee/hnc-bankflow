@@ -125,6 +125,7 @@ export default function ConverterPage(){
               <div className="flex items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
                 <span>{tx.selectedCount} selected</span>
                 <button onClick={tx.bulkVerify} className="ml-2 px-3 py-1 bg-green-100 text-green-700 rounded text-xs border border-green-200">✓ Verify</button>
+                <button onClick={tx.bulkInvert} className="px-3 py-1 bg-amber-100 text-amber-700 rounded text-xs border border-amber-200">⇄ Invert In/Out</button>
                 <button onClick={tx.bulkDelete} className="px-3 py-1 bg-red-100 text-red-600 rounded text-xs border border-red-200">🗑 Delete</button>
                 <button onClick={()=>tx.toggleSelectAll(false)} className="ml-auto text-blue-400 text-xs">✕ Deselect</button>
               </div>
@@ -162,6 +163,7 @@ export default function ConverterPage(){
                             {t._auto_corrected&&<span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-violet-100 text-violet-700">🧠 Learned</span>}
                             {t._isRedFlag&&<span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700">🚩 Flag</span>}
                             {t._isDuplicate&&<span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-purple-100 text-purple-700">⚡ Dup</span>}
+                            {t._isRound&&<span title="Round-sum amount — common in director loans/preferences" className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-orange-100 text-orange-700">⊙ Round</span>}
                             {t._suggested&&<button onClick={()=>setLearn({open:true,idx:ri,raw:t.description,corrected:t._suggestion||''})} className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-700">✨ {t._suggestion}?</button>}
                           </div>
                         </td>
@@ -178,8 +180,9 @@ export default function ConverterPage(){
                           </div>
                         </td>
                         <td className="px-3 py-2">
-                          <input key={`bal-${t.id}-${t.balance}`} className={`cell-input w-20 text-right font-mono ${t._val?.balImpossible?'!border-2 !border-red-500 !bg-red-100 animate-pulse':''}`} style={t._val?.balImpossible?{color:'#dc2626',fontWeight:700}:{color:'#d97706'}} defaultValue={t.balance} placeholder="—" onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.balance)tx.editCell(ri,'balance',e.target.value)}}/>
-                          {t._val?.balImpossible&&<p className="text-[9px] font-bold" style={{color:'#dc2626'}}>Exp:£{t._val.expected?.toFixed(2)}</p>}
+                          <input key={`bal-${t.id}-${t.balance}`} className={`cell-input w-20 text-right font-mono ${t._val?.status==='error'?'!border-2 !border-red-500 !bg-red-100 animate-pulse':t._val?.status==='warn'?'!border-2 !border-orange-400 !bg-orange-50':''}`} style={t._val?.status==='error'?{color:'#dc2626',fontWeight:700}:t._val?.status==='warn'?{color:'#ea580c',fontWeight:600}:{color:'#d97706'}} defaultValue={t.balance} placeholder="—" onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.balance)tx.editCell(ri,'balance',e.target.value)}}/>
+                          {t._val?.status==='error'&&<p className="text-[9px] font-bold" style={{color:'#dc2626'}}>Exp:£{t._val.expected?.toFixed(2)}</p>}
+                          {t._val?.status==='warn'&&<p className="text-[9px] font-semibold" style={{color:'#ea580c'}}>OCR? Exp:£{t._val.expected?.toFixed(2)}</p>}
                         </td>
                         <td className="px-3 py-2">
                           {!t._val||t._val.status==='skip'?<span className="text-slate-300">—</span>:
