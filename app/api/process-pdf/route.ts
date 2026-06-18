@@ -40,19 +40,47 @@ function parseTransactions(document: any, mappings: any[]): any[] {
   const dateRx = /^(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})/i
 
   // Group lines into transaction blocks (each starts with a date)
+  const amtTest = /£?\d{1,3}(?:,\d{3})*\.\d{2}/
+  const noise = /^(Date Type|Page \d|©|National Westminster|Authorised|Your transactions|Showing:|Account |Sort code|Transactions$)/i
   const blocks: string[] = []
   let current = ''
   for (const line of lines) {
     if (dateRx.test(line)) {
-      if (current) blocks.push(current)
-      current = line
+      // A new date line starts a new block ONLY if current already has an amount.
+      // Otherwise the current block is still incomplete — append (handles wrapped/same-date rows).
+      if (current && amtTest.test(current)) {
+        blocks.push(current)
+        current = line
+      } else if (current) {
+        // current incomplete — but this line is itself a full dated txn; push old, start new
+        current += ' ' + line
+      } else {
+        current = line
+      }
     } else if (current) {
-      // Skip header/footer noise
-      if (/^(Date Type|Page \d|©|National Westminster|Authorised|Your transactions|Showing:|Account |Sort code|Transactions$)/i.test(line)) continue
+      if (noise.test(line)) continue
       current += ' ' + line
     }
   }
   if (current) blocks.push(current)
+
+  // Split any block that accidentally merged two dated transactions
+  const splitBlocks: string[] = []
+  for (const b of blocks) {
+    const parts = b.split(dateRx).filter(Boolean)
+    // re-attach the date prefixes
+    const matches = Array.from(b.matchAll(new RegExp(dateRx.source, 'gi')))
+    if (matches.length <= 1) { splitBlocks.push(b); continue }
+    let lastIdx = 0
+    const segs: string[] = []
+    matches.forEach((m, k) => {
+      if (k > 0) { segs.push(b.slice(lastIdx, m.index).trim()); lastIdx = m.index! }
+    })
+    segs.push(b.slice(lastIdx).trim())
+    for (const s of segs) if (s) splitBlocks.push(s)
+  }
+  blocks.length = 0
+  blocks.push(...splitBlocks)
 
   for (const block of blocks) {
     const dm = block.match(dateRx)
@@ -95,7 +123,9 @@ function parseTransactions(document: any, mappings: any[]): any[] {
       balance = amounts[0]
     }
 
-    if (date) {
+    // Skip empty rows: a date with no amounts and no description is a parse artifact
+    const hasContent = amounts.length > 0 || (desc && desc.replace(/[—\s]/g,'').length > 1)
+    if (date && hasContent) {
       transactions.push({
         id: Math.random().toString(36).slice(2),
         date, txtype, description: desc || '—', paidin, paidout, balance,
