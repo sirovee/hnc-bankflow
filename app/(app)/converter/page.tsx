@@ -2,7 +2,6 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { useTransactions } from '@/hooks/useTransactions'
-import PdfViewer from '@/components/pdf/PdfViewer'
 import SaveMemoryModal from '@/components/learning/SaveMemoryModal'
 import type { ProcessPdfResponse } from '@/types'
 import * as XLSX from 'xlsx'
@@ -12,7 +11,6 @@ export default function ConverterPage(){
   const[proc,setProc]=useState({active:false,progress:0,msg:''})
   const[pdfFile,setPdf]=useState<File|null>(null)
   const[fileName,setFn]=useState('')
-  const[showPdf,setShowPdf]=useState(false)
   const[session,setSession]=useState('')
   const[learn,setLearn]=useState({open:false,idx:0,raw:'',corrected:''})
   const[filter,setFilter]=useState('')
@@ -28,7 +26,6 @@ export default function ConverterPage(){
       setProc({active:true,progress:90,msg:'Applying learning engine…'})
       tx.loadTransactions(data.transactions)
       setSession(data.sessionId||'')
-      setShowPdf(true)
       setProc({active:true,progress:100,msg:'Done!'})
       setTimeout(()=>setProc({active:false,progress:0,msg:''}),800)
       toast.success(`Loaded ${data.transactions.length} transactions`)
@@ -61,7 +58,6 @@ export default function ConverterPage(){
           {tx.rows.length>0&&<>
             <button onClick={()=>tx.addRow()} className="px-3 py-1.5 border border-border rounded-md text-sm hover:bg-slate-50">+ Add Row</button>
             <button onClick={exportExcel} className="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700">⬇ Excel</button>
-            {pdfFile&&<button onClick={()=>setShowPdf(s=>!s)} className="px-3 py-1.5 border border-border rounded-md text-sm hover:bg-slate-50">{showPdf?'Hide PDF':'Show PDF'}</button>}
           </>}
         </div>
       </div>
@@ -90,7 +86,7 @@ export default function ConverterPage(){
       )}
 
       {tx.rows.length>0&&(
-        <div className={`flex gap-4 flex-1 min-h-0 ${showPdf?'flex-row':'flex-col'}`}>
+        <div className="flex gap-4 flex-1 min-h-0 flex-col">
           <div className="flex flex-col flex-1 min-w-0 rounded-xl border border-border bg-background overflow-hidden">
 
             {/* Stats */}
@@ -139,17 +135,19 @@ export default function ConverterPage(){
               <table className="sticky-table w-full border-collapse text-xs">
                 <thead><tr>
                   <th className="w-8 px-3 py-2.5 border-b border-border"><input type="checkbox" onChange={e=>tx.toggleSelectAll(e.target.checked)}/></th>
+                  <th className="w-10 px-2 py-2.5 text-left border-b border-border text-[10px] font-semibold text-slate-500 uppercase tracking-wide">#</th>
                   {['Date','Type','Description','Paid In','Paid Out','Balance','✓','Actions'].map(h=>(
                     <th key={h} className="px-3 py-2.5 text-left border-b border-border text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr></thead>
                 <tbody>
-                  {filtered.map((t)=>{
+                  {filtered.map((t,idx)=>{
                     const ri=tx.rows.findIndex(r=>r.id===t.id)
                     const rc=t._val?.status==='error'?'row-error':t._val?.status==='warn'?'row-warn':t._isDuplicate?'row-dup':t._isRedFlag?'row-flag':''
                     return(
                       <tr key={t.id} className={`border-b border-border hover:bg-slate-50 transition-colors group ${rc}`}>
                         <td className="px-3 py-2"><input type="checkbox" checked={t._selected} onChange={e=>tx.toggleSelect(t.id,e.target.checked)}/></td>
+                        <td className="px-2 py-2 text-slate-400 text-xs text-center font-mono">{idx+1}</td>
                         <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
                           <input key={`date-${t.id}-${t.date}`} className="cell-input w-24" defaultValue={t.date} onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}} onBlur={e=>{if(e.target.value!==t.date)tx.editCell(ri,'date',e.target.value)}}/>
                         </td>
@@ -204,7 +202,6 @@ export default function ConverterPage(){
               </table>
             </div>
           </div>
-          {showPdf&&pdfFile&&<div className="w-96 shrink-0"><PdfViewer file={pdfFile}/></div>}
         </div>
       )}
 
