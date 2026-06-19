@@ -31,12 +31,11 @@ function findDups(txs: EnrichedTransaction[]): Set<number> {
   return dups
 }
 
-function reconcile(txs: EnrichedTransaction[]): ReconciliationSummary|null {
+function reconcile(txs: EnrichedTransaction[], openingOv: number|null): ReconciliationSummary|null {
   if(!txs.length)return null
   const oldest=txs[txs.length-1],newest=txs[0]
-  // True opening = oldest row's balance reversed by its own movement
-  // (its balance is AFTER the txn, so undo it to get the statement opening)
-  const opening=Math.round((safeFloat(oldest.balance).val - safeFloat(oldest.paidin).val + safeFloat(oldest.paidout).val)*100)/100
+  // Opening: user override if set, else oldest row's balance reversed by its own movement
+  const opening=openingOv!==null?openingOv:Math.round((safeFloat(oldest.balance).val - safeFloat(oldest.paidin).val + safeFloat(oldest.paidout).val)*100)/100
   const totalIn=txs.reduce((s,t)=>s+safeFloat(t.paidin).val,0)
   const totalOut=txs.reduce((s,t)=>s+safeFloat(t.paidout).val,0)
   const calc=Math.round((opening+totalIn-totalOut)*100)/100
@@ -52,13 +51,14 @@ export function useTransactions(initial: EnrichedTransaction[]=[]) {
   const[audit,setAudit]=useState<AuditEntry[]>([])
   const[verified,setVerified]=useState<Set<number>>(new Set())
   const[selected,setSelected]=useState<Record<string,boolean>>({})
+  const[openingOverride,setOpeningOverride]=useState<number|null>(null)
 
   const enriched=useMemo<EnrichedTransaction[]>(()=>{
     const dups=findDups(rows),vals=validate(rows)
     return rows.map((t,i)=>({...t,_val:vals[i]??null,_isDuplicate:dups.has(i),_isRedFlag:RED.test(t.description||''),_isVerified:verified.has(i),_parseWarn:vals[i]?.parseWarn??false,_selected:!!selected[t.id],_isRound:(()=>{const v=Math.max(safeFloat(t.paidin).val,safeFloat(t.paidout).val);return v>=100&&Number.isInteger(v)})()}))
   },[rows,verified,selected])
 
-  const recon=useMemo(()=>reconcile(enriched),[enriched])
+  const recon=useMemo(()=>reconcile(enriched,openingOverride),[enriched,openingOverride])
   const stats=useMemo<ProcessingStats>(()=>({total:enriched.length,autoCorrected:enriched.filter(t=>t._auto_corrected).length,suggested:enriched.filter(t=>t._suggested).length,lowConfidence:enriched.filter(t=>t._confidence!==null&&(t._confidence??1)<0.8).length,errors:enriched.filter(t=>t._val?.status==='error').length,warnings:enriched.filter(t=>t._val?.status==='warn').length,duplicates:enriched.filter(t=>t._isDuplicate).length,redFlags:enriched.filter(t=>t._isRedFlag).length}),[enriched])
 
   const editCell=useCallback((idx:number,field:keyof EnrichedTransaction,value:string)=>{
@@ -117,5 +117,5 @@ export function useTransactions(initial: EnrichedTransaction[]=[]) {
   const toggleSelect=useCallback((id:string,checked:boolean)=>setSelected(s=>({...s,[id]:checked})),[])
   const toggleSelectAll=useCallback((checked:boolean)=>setSelected(checked?Object.fromEntries(enriched.map(t=>[t.id,true])):{}), [enriched])
 
-  return{rows:enriched,audit,recon,stats,selectedCount:selectedIndices.length,selectedIndices,editCell,addRow,deleteRow,duplicateRow,moveAmount,bulkInvert,restoreEdit,loadTransactions,bulkDelete,bulkVerify,bulkUnverify,toggleSelect,toggleSelectAll}
+  return{rows:enriched,audit,recon,stats,selectedCount:selectedIndices.length,selectedIndices,editCell,addRow,deleteRow,duplicateRow,moveAmount,bulkInvert,restoreEdit,loadTransactions,bulkDelete,bulkVerify,bulkUnverify,toggleSelect,toggleSelectAll,openingOverride,setOpeningOverride}
 }

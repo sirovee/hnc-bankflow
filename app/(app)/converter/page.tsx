@@ -103,6 +103,14 @@ export default function ConverterPage(){
             {tx.recon&&(
               <div className={`flex items-center gap-2 px-4 py-2.5 border-b border-border text-xs flex-wrap ${tx.recon.status==='balanced'?'bg-green-50':tx.recon.status==='warning'?'bg-amber-50':'bg-red-50'}`}>
                 <span className="font-bold text-slate-500 uppercase tracking-wide text-[10px]">Reconciliation</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] uppercase tracking-wide text-slate-400">Set Opening £</span>
+                  <input type="text" placeholder={tx.recon?tx.recon.openingBalance.toFixed(2):'0.00'} defaultValue={tx.openingOverride!==null?tx.openingOverride.toFixed(2):''}
+                    onBlur={e=>{const v=e.target.value.trim().replace(/[£,\s]/g,'');if(v===''){tx.setOpeningOverride(null)}else{const n=parseFloat(v);if(!isNaN(n))tx.setOpeningOverride(n)}}}
+                    onKeyDown={e=>{if(e.key==='Enter')(e.target as HTMLInputElement).blur()}}
+                    className="w-24 h-6 rounded border border-indigo-300 px-2 text-xs font-mono text-right outline-none focus:ring-1 focus:ring-indigo-500"/>
+                  {tx.openingOverride!==null&&<button onClick={()=>tx.setOpeningOverride(null)} title="Reset to auto" className="text-[10px] text-slate-400 hover:text-red-500">✕</button>}
+                </div>
                 {([['Opening',tx.recon.openingBalance,'#2563eb'],['+','',''  ],['Paid In',tx.recon.totalIn,'#16a34a'],['−','',''  ],['Paid Out',tx.recon.totalOut,'#dc2626'],['=','',''  ],['Calculated',tx.recon.calculatedClose,'#6366f1'],['vs','',''  ],['Actual',tx.recon.actualClose,'#d97706']] as const).map(([l,v,c],i)=>(
                   typeof v==='number'
                     ?<div key={i} className="flex flex-col items-center rounded-lg border border-slate-200 bg-white/70 px-3 py-1.5"><span className="text-[9px] uppercase tracking-wide text-slate-400">{l}</span><span className="font-bold" style={{color:String(c)}}>£{Number(v).toLocaleString('en-GB',{minimumFractionDigits:2})}</span></div>
