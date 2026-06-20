@@ -156,6 +156,71 @@ function parseFromText(document: any): any[] {
 // ──────────────────────────────────────────────────────────────
 // Master parser: try tables first, fall back to text
 // ──────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────
+// LAYER 0: Barclays / legacy pipe-delimited fiche parser
+// Format: <details> CODE | <payment> | <receipt> | <DATE> | <balance> ||
+// ──────────────────────────────────────────────────────────────
+function isFicheFormat(text: string): boolean {
+  if (!text) return false
+  const hasHeader = /PAYMENTS/.test(text) && /RECEIPTS/.test(text) && /STATEMENT BALANCE/.test(text)
+  const pipeLines = text.split('\n').filter(l => l.split('|').length >= 4).length
+  return hasHeader && pipeLines > 3
+}
+
+function parseFromFiche(document: any): any[] {
+  const rawText = document?.text || ''
+  if (!rawText) return []
+  const monthMap: Record<string,string> = {JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'}
+  function toISO(d: string): string {
+    const m = d.trim().match(/^(\d{1,2})\s+([A-Z]{3})\s+(\d{2})$/i)
+    if (!m) return d
+    return `20${m[3]}-${monthMap[m[2].toUpperCase()]}-${m[1].padStart(2,'0')}`
+  }
+  function cleanAmt(s: string): string {
+    if (!s) return ''
+    const n = parseFloat(String(s).replace(/[£,C\s]/g, ''))
+    return isNaN(n) ? '' : n.toFixed(2)
+  }
+
+  const lines = rawText.split('\n')
+  const txs: any[] = []
+  let descBuffer: string[] = []
+
+  for (const line of lines) {
+    if (/DETAILS\s*¦|FOR INTEREST|BARCLAYS BANK|LEDGER|BUSINESS BANKING|FICHE PERIOD|CURRENT ACCOUNT|ACCOUNT FRAME|TRADING AS|LAST PREVIOUS|ADDRESS|^-+$/.test(line)) continue
+    const isBalFwd = /BALANCE FORWARD/.test(line)
+    const parts = line.split('|').map(p => p.replace(/¦/g, '').trim())
+
+    if (parts.length < 5) {
+      const t = parts[0]?.trim()
+      if (t && !isBalFwd) descBuffer.push(t)
+      continue
+    }
+
+    const details = parts[0], payment = parts[1], receipt = parts[2], date = parts[3], balance = parts[4]
+    if (details && !isBalFwd) descBuffer.push(details)
+
+    if (isBalFwd) { descBuffer = []; continue }
+    if (!date) continue
+
+    const fullDesc = descBuffer.join(' ').replace(/\s+/g, ' ').trim()
+    descBuffer = []
+
+    const paidout = cleanAmt(payment)
+    const paidin  = cleanAmt(receipt)
+    const bal     = cleanAmt(balance)
+    if (!paidout && !paidin && !bal) continue
+
+    // extract trailing transaction code (DDR, BGC, BDC, CLP, ATM, STO, BCC, ASD)
+    const codeMatch = fullDesc.match(/\b(DDR|BGC|BDC|CLP|ATM|STO|BCC|ASD|CHG)\b\s*$/)
+    const txtype = codeMatch ? codeMatch[1] : ''
+    const desc = txtype ? fullDesc.replace(/\s*\b(DDR|BGC|BDC|CLP|ATM|STO|BCC|ASD|CHG)\b\s*$/, '').trim() : fullDesc
+
+    txs.push({ date: toISO(date), txtype, description: desc || '—', paidin, paidout, balance: bal })
+  }
+  return txs
+}
+
 function parseTransactions(document: any, mappings: any[]): any[] {
   const corrMap: Record<string, string> = {}
   for (const m of (mappings || [])) {
@@ -169,8 +234,12 @@ function parseTransactions(document: any, mappings: any[]): any[] {
     return text
   }
 
-  let rows = parseFromTables(document)
-  if (rows.length < 2) rows = parseFromText(document)  // tables failed → regex
+  let rows: any[] = []
+  if (isFicheFormat(document?.text || '')) {
+    rows = parseFromFiche(document)               // Barclays/legacy fiche
+  }
+  if (rows.length < 2) rows = parseFromTables(document)  // native tables
+  if (rows.length < 2) rows = parseFromText(document)    // NatWest-style text
 
   return rows.map(r => ({
     id: Math.random().toString(36).slice(2),
