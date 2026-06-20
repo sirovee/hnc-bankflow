@@ -163,7 +163,7 @@ function parseFromText(document: any): any[] {
 function isFicheFormat(text: string): boolean {
   if (!text) return false
   const hasHeader = /PAYMENTS/.test(text) && /RECEIPTS/.test(text) && /STATEMENT BALANCE/.test(text)
-  const pipeLines = text.split('\n').filter(l => l.split('|').length >= 4).length
+  const pipeLines = text.split('\n').filter((l: string) => l.split('|').length >= 4).length
   return hasHeader && pipeLines > 3
 }
 
@@ -189,7 +189,7 @@ function parseFromFiche(document: any): any[] {
   for (const line of lines) {
     if (/DETAILS\s*¦|FOR INTEREST|BARCLAYS BANK|LEDGER|BUSINESS BANKING|FICHE PERIOD|CURRENT ACCOUNT|ACCOUNT FRAME|TRADING AS|LAST PREVIOUS|ADDRESS|^-+$/.test(line)) continue
     const isBalFwd = /BALANCE FORWARD/.test(line)
-    const parts = line.split('|').map(p => p.replace(/¦/g, '').trim())
+    const parts = line.split('|').map((p: string) => p.replace(/¦/g, '').trim())
 
     if (parts.length < 5) {
       const t = parts[0]?.trim()
