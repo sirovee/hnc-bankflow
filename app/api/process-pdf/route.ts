@@ -235,7 +235,7 @@ export async function POST(req: NextRequest) {
       const summary = {
         textLength: (doc.text || '').length,
         entityCount: (doc.entities || []).length,
-        entityTypes: [...new Set((doc.entities || []).map((e: any) => e.type))].slice(0, 30),
+        entityTypes: Array.from(new Set((doc.entities || []).map((e: any) => e.type))).slice(0, 30),
         pageCount: pages.length,
         tablesPerPage: pages.map((p: any) => (p.tables || []).length),
         firstTableHeader: (() => {
