@@ -67,6 +67,10 @@ export default function DebugPage(){
                 : <span className="text-slate-400 text-sm">No table rows</span>}
             </Block>
 
+            <Block title="🔑 Sample Entities (table_item internals)">
+              <pre className="text-xs bg-slate-900 text-green-400 p-3 rounded overflow-auto max-h-80">{JSON.stringify(result.sampleEntities, null, 2)}</pre>
+            </Block>
+
             <Block title="Sample: parseFromTables() output">
               <pre className="text-xs bg-slate-900 text-green-400 p-3 rounded overflow-auto max-h-60">{JSON.stringify(result.sampleParseFromTables, null, 2)}</pre>
             </Block>

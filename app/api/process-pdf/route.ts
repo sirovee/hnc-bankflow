@@ -253,6 +253,16 @@ export async function POST(req: NextRequest) {
           }
           return []
         })(),
+        sampleEntities: (doc.entities || []).slice(0, 3).map((e: any) => ({
+          type: e.type,
+          mentionText: (e.mentionText || '').slice(0, 80),
+          normalizedValue: e.normalizedValue?.text || null,
+          properties: (e.properties || []).map((p: any) => ({
+            type: p.type,
+            mentionText: (p.mentionText || '').slice(0, 60),
+            normalized: p.normalizedValue?.text || null
+          }))
+        })),
         sampleParseFromTables: parseFromTables(doc).slice(0, 3),
         sampleParseFromText: parseFromText(doc).slice(0, 3),
       }
